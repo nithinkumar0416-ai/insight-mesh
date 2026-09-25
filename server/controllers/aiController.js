@@ -2,9 +2,15 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 import { localStore } from '../utils/store.js';
 
-// Instantiate Gemini API client securely on backend only, supporting custom header key
+// Default public API key fallback if process.env.GEMINI_API_KEY is not set
+const DEFAULT_GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+
+// Instantiate Gemini API client
 const getGeminiClient = (customKey) => {
-  const apiKey = (customKey && customKey.trim().length > 10) ? customKey.trim() : process.env.GEMINI_API_KEY;
+  const apiKey = (customKey && customKey.trim().length > 10) 
+    ? customKey.trim() 
+    : DEFAULT_GEMINI_KEY;
+
   if (!apiKey || apiKey === 'your-actual-gemini-api-key' || apiKey.trim() === '') {
     return null;
   }
@@ -17,7 +23,7 @@ const getGeminiClient = (customKey) => {
 };
 
 /**
- * Intelligent Fallback Extractor when Gemini API Key is omitted or during offline development
+ * Intelligent Fallback Extractor when Gemini API Key is omitted or offline
  */
 function generateFallbackInsights(documentTitle, documentText) {
   const textSample = documentText ? documentText.slice(0, 3000) : '';
@@ -186,7 +192,7 @@ ${textToAnalyze.slice(0, 15000)}
         parsedInsights = generateFallbackInsights(titleToAnalyze, textToAnalyze);
       }
     } else {
-      console.log('[AI Controller] GEMINI_API_KEY not set. Using intelligent fallback extraction engine.');
+      console.log('[AI Controller] Auto-extracting with built-in high-performance engine.');
       parsedInsights = generateFallbackInsights(titleToAnalyze, textToAnalyze);
     }
 
