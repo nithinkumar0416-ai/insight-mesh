@@ -9,6 +9,9 @@
     "server": "cd server && npm run dev",
     "client": "cd client && npm run dev"
   },
+  "allowScripts": {
+    "esbuild": true
+  },
   "keywords": ["ai", "gemini", "knowledge-graph", "evidence-synthesizer"],
   "author": "InsightMesh Team",
   "license": "MIT"
