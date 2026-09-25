@@ -2,14 +2,14 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 import { localStore } from '../utils/store.js';
 
-// Instantiate Gemini API client securely on backend only
-const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'your-actual-gemini-api-key') {
+// Instantiate Gemini API client securely on backend only, supporting custom header key
+const getGeminiClient = (customKey) => {
+  const apiKey = (customKey && customKey.trim().length > 10) ? customKey.trim() : process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your-actual-gemini-api-key' || apiKey.trim() === '') {
     return null;
   }
   try {
-    return new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey: apiKey.trim() });
   } catch (err) {
     console.warn('Failed to initialize GoogleGenAI client:', err.message);
     return null;
@@ -20,7 +20,6 @@ const getGeminiClient = () => {
  * Intelligent Fallback Extractor when Gemini API Key is omitted or during offline development
  */
 function generateFallbackInsights(documentTitle, documentText) {
-  const titleLower = (documentTitle || '').toLowerCase();
   const textSample = documentText ? documentText.slice(0, 3000) : '';
 
   // Extract candidate key terms
@@ -98,7 +97,8 @@ function generateFallbackInsights(documentTitle, documentText) {
  */
 export const analyzeResearchDocument = async (req, res) => {
   try {
-    const { documentId, documentText, documentTitle } = req.body;
+    const { documentId, documentText, documentTitle, geminiApiKey } = req.body;
+    const customKey = req.headers['x-gemini-api-key'] || geminiApiKey;
 
     let textToAnalyze = documentText;
     let titleToAnalyze = documentTitle || 'Research Paper';
@@ -119,12 +119,14 @@ export const analyzeResearchDocument = async (req, res) => {
       return res.status(400).json({ error: 'Document text or valid documentId is required.' });
     }
 
-    const ai = getGeminiClient();
+    const ai = getGeminiClient(customKey);
     let parsedInsights;
 
     if (ai) {
-      try {
-        const prompt = `
+      let responseText = null;
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+      const prompt = `
 You are an expert AI Research Assistant analyzing "${titleToAnalyze}".
 Extract structural knowledge, entity relationships, and evidence-backed claims from the document text in strict, valid JSON format.
 
@@ -154,17 +156,33 @@ Document Text:
 ${textToAnalyze.slice(0, 15000)}
 `;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json'
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json'
+            }
+          });
+          if (response && response.text) {
+            responseText = response.text;
+            break;
           }
-        });
+        } catch (modelErr) {
+          console.warn(`[Gemini Model ${modelName} failed]:`, modelErr.message);
+        }
+      }
 
-        parsedInsights = JSON.parse(response.text);
-      } catch (geminiError) {
-        console.error('Gemini API execution error, falling back to local extractor:', geminiError.message);
+      if (responseText) {
+        try {
+          parsedInsights = JSON.parse(responseText);
+        } catch (jsonErr) {
+          console.error('Failed to parse Gemini JSON output:', jsonErr.message);
+          parsedInsights = generateFallbackInsights(titleToAnalyze, textToAnalyze);
+        }
+      } else {
+        console.warn('All Gemini models failed or key invalid. Falling back to local extractor.');
         parsedInsights = generateFallbackInsights(titleToAnalyze, textToAnalyze);
       }
     } else {
@@ -206,7 +224,8 @@ ${textToAnalyze.slice(0, 15000)}
  */
 export const analyzeMultiDocuments = async (req, res) => {
   try {
-    const { documentIds } = req.body;
+    const { documentIds, geminiApiKey } = req.body;
+    const customKey = req.headers['x-gemini-api-key'] || geminiApiKey;
     const userId = req.user.id;
 
     let targetDocs = [];
@@ -227,7 +246,6 @@ export const analyzeMultiDocuments = async (req, res) => {
       return res.status(400).json({ error: 'No uploaded documents available to synthesize.' });
     }
 
-    // Ensure all target documents have insights generated
     const docSummaries = [];
     for (const doc of targetDocs) {
       let insight = isSupabaseConfigured
@@ -258,12 +276,10 @@ export const analyzeMultiDocuments = async (req, res) => {
       });
     }
 
-    // Synthesize Knowledge Graph nodes & cross-document edges
     const nodesMap = new Map();
     const links = [];
     const synthesizedClaims = [];
 
-    // Helper to generate node IDs
     const getNodeKey = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, '-');
 
     docSummaries.forEach(({ documentId, title, insight }) => {
@@ -272,7 +288,6 @@ export const analyzeMultiDocuments = async (req, res) => {
       const entities = insight.key_entities || [];
       const claims = insight.claims_analysis || [];
 
-      // Add entities to node map
       entities.forEach((ent) => {
         const key = getNodeKey(ent.name);
         if (!nodesMap.has(key)) {
@@ -291,12 +306,11 @@ export const analyzeMultiDocuments = async (req, res) => {
           if (!existing.documents.includes(documentId)) {
             existing.documents.push(documentId);
             existing.docTitles.push(title);
-            existing.importance = 'High'; // Upgraded importance if shared across multiple docs
+            existing.importance = 'High';
           }
         }
       });
 
-      // Add claims
       claims.forEach((c) => {
         synthesizedClaims.push({
           ...c,
@@ -308,13 +322,11 @@ export const analyzeMultiDocuments = async (req, res) => {
 
     const nodes = Array.from(nodesMap.values());
 
-    // Build relations/links between entities sharing documents or concepts
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const nodeA = nodes[i];
         const nodeB = nodes[j];
 
-        // Shared documents connection
         const sharedDocs = nodeA.documents.filter(d => nodeB.documents.includes(d));
         if (sharedDocs.length > 0) {
           links.push({
@@ -329,7 +341,6 @@ export const analyzeMultiDocuments = async (req, res) => {
       }
     }
 
-    // Discover cross-paper claim conflicts/agreements
     const crossDocumentAnalysis = {
       totalDocuments: targetDocs.length,
       totalEntities: nodes.length,
