@@ -4,18 +4,27 @@ import multer from 'multer';
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['application/pdf', 'text/plain', 'text/markdown', 'application/json'];
-  const ext = file.originalname.toLowerCase();
+  const ext = (file.originalname || '').toLowerCase();
+  const allowedMimeTypes = ['application/pdf', 'text/plain', 'text/markdown', 'application/json', 'application/octet-stream'];
 
-  if (allowedTypes.includes(file.mimetype) || ext.endsWith('.pdf') || ext.endsWith('.txt') || ext.endsWith('.md')) {
+  if (
+    allowedMimeTypes.includes(file.mimetype) ||
+    ext.endsWith('.pdf') ||
+    ext.endsWith('.txt') ||
+    ext.endsWith('.md')
+  ) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only PDF, TXT, and Markdown documents are supported.'), false);
+    const customErr = new Error('Invalid file type. Please upload a valid PDF, TXT, or Markdown document.');
+    customErr.status = 400;
+    cb(customErr, false);
   }
 };
 
-export const upload = multer({
+const uploadMulter = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB max file size
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB max file size
   fileFilter
 });
+
+export const upload = uploadMulter;

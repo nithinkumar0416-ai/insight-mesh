@@ -26,44 +26,45 @@ export default function DocumentUploader({ onUploadSuccess, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) {
-      setError('Please select a PDF or TXT document first.');
+      setError('Please select a PDF, TXT, or Markdown document to upload.');
       return;
     }
 
     setUploading(true);
     setError('');
+    setSuccessMsg('');
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', file.name);
 
     try {
-      const res = await API.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // Omit explicit Content-Type header so Axios generates boundary automatically
+      const res = await API.post('/documents/upload', formData);
 
       setSuccessMsg(`"${file.name}" uploaded and parsed successfully!`);
       setTimeout(() => {
         if (onUploadSuccess) onUploadSuccess(res.data.document);
         if (onClose) onClose();
-      }, 1200);
+      }, 1000);
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.response?.data?.error || 'Failed to upload document.');
+      const serverMsg = err.response?.data?.error || err.message || 'Failed to upload document.';
+      setError(serverMsg);
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4">
+    <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4 text-white">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-cyan-400" />
             Upload Research Document
           </h3>
-          <p className="text-xs text-slate-400">Upload PDF or TXT papers to extract entity knowledge graphs & claims.</p>
+          <p className="text-xs text-slate-400">Upload PDF, TXT, or Markdown papers to extract knowledge graphs & claims.</p>
         </div>
       </div>
 
@@ -100,7 +101,7 @@ export default function DocumentUploader({ onUploadSuccess, onClose }) {
                 <p className="text-sm font-semibold text-slate-200">
                   Drag & Drop PDF / TXT here, or <span className="text-cyan-400 underline">Browse files</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Supports PDFs, TXT research articles up to 20MB</p>
+                <p className="text-xs text-slate-500 mt-1">Supports PDFs, TXT, MD research articles up to 20MB</p>
               </div>
             )}
           </label>
