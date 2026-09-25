@@ -1,0 +1,15 @@
+{
+  "name": "insight-mesh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "InsightMesh AI - Automated Cross-Document Knowledge Graph & Evidence Synthesizer",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && npm start",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev"
+  },
+  "keywords": ["ai", "gemini", "knowledge-graph", "evidence-synthesizer"],
+  "author": "InsightMesh Team",
+  "license": "MIT"
+}

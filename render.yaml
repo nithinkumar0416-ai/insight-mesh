@@ -1,0 +1,21 @@
+services:
+  # Express Node.js Backend Web Service for Render
+  - type: web
+    name: insightmesh-api
+    env: node
+    region: oregon
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        value: https://your-supabase-project.supabase.co
+      - key: SUPABASE_KEY
+        value: your-supabase-anon-key
+      - key: GEMINI_API_KEY
+        sync: false
