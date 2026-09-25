@@ -4,7 +4,7 @@
   "private": true,
   "description": "InsightMesh AI - Automated Cross-Document Knowledge Graph & Evidence Synthesizer",
   "scripts": {
-    "build": "cd client && npm install && npm run build",
+    "build": "npm run build --prefix client",
     "start": "cd server && npm start",
     "server": "cd server && npm run dev",
     "client": "cd client && npm run dev"
